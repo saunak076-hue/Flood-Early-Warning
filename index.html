@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flood Early Warning | Hydrological Risk Intelligence • West Bengal Basin</title>
+  
+  <!-- Inter Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Dashboard Custom Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+  <div class="dashboard-container">
+    
+    <!-- Top Header -->
+    <header class="dashboard-header">
+      <div class="brand-wrapper">
+        <div class="brand-icon">🌊</div>
+        <div>
+          <h1 class="brand-title">Flood Early Warning</h1>
+          <p class="brand-subtitle">Hydrological Risk Intelligence • West Bengal Basin</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div id="statusBadge" class="status-badge">
+          <span class="pulse-dot"></span>
+          <span id="statusText">LIVE (Open-Meteo & GloFAS)</span>
+        </div>
+
+        <div class="clock-display" id="utcClock">Loading clock...</div>
+        <div class="clock-display" id="lastUpdatedTime" style="color: var(--accent-cyan);">Syncing...</div>
+
+        <div class="toggle-wrapper" title="Switch between Live Upstream API Data and Demo Flood Scenario">
+          <span id="demoToggleLabel">Data Mode: <strong style="color: #4ade80;">LIVE</strong></span>
+          <label class="switch" aria-label="Toggle Demo Scenario Mode">
+            <input type="checkbox" id="demoSwitch">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <button id="refreshBtn" class="btn-primary" title="Trigger instant API data fetch">
+          <span>⟳</span> Refresh Now
+        </button>
+      </div>
+    </header>
+
+    <!-- KPI Summary Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <span class="kpi-label">Monitored Zones</span>
+        <div class="kpi-value-row">
+          <span class="kpi-value" id="kpiMonitoredZones">8</span>
+          <span class="kpi-unit">Catchments</span>
+        </div>
+        <span class="kpi-subtext">West Bengal river basins & coastal zones</span>
+      </div>
+
+      <div class="kpi-card">
+        <span class="kpi-label">Highest Catchment Risk</span>
+        <div class="kpi-value-row">
+          <span class="kpi-value" id="kpiHighestRisk" style="font-size: 1.35rem;">Loading...</span>
+        </div>
+        <div style="margin-top: 0.35rem;">
+          <span id="kpiRiskBadge" class="risk-pill low">LOW</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <span class="kpi-label">Active Flood Alerts</span>
+        <div class="kpi-value-row">
+          <span class="kpi-value" id="kpiActiveAlerts" style="color: #38bdf8;">0</span>
+          <span class="kpi-unit">Triggered</span>
+        </div>
+        <span class="kpi-subtext">Documented advisory & danger thresholds</span>
+      </div>
+
+      <div class="kpi-card">
+        <span class="kpi-label">Peak 24h Rainfall</span>
+        <div class="kpi-value-row">
+          <span class="kpi-value" id="kpiPeakRainfall">0.0</span>
+          <span class="kpi-unit">mm</span>
+        </div>
+        <span class="kpi-subtext">Open-Meteo High-Resolution Precipitation</span>
+      </div>
+    </section>
+
+    <!-- Alert Center -->
+    <section class="alerts-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          <span>🚨</span> Emergency Alert Center
+        </h2>
+      </div>
+      <div id="alertsContainer">
+        <div class="empty-alerts">Loading active alerts...</div>
+      </div>
+    </section>
+
+    <!-- Map & Simulator Layout -->
+    <section class="main-grid">
+      
+      <!-- Leaflet Map Card -->
+      <div class="map-card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <span>🗺️</span> West Bengal Geospatial Flood Risk Map
+          </h3>
+          <span style="font-size: 0.75rem; color: var(--text-secondary);">Click marker for catchment telemetry</span>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="map-legend">
+          <span style="font-weight: 600; color: #fff;">Risk Index:</span>
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #22c55e;"></span>
+            <span>LOW (0-29)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #eab308;"></span>
+            <span>MODERATE (30-59)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #f97316;"></span>
+            <span>HIGH (60-79)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #ef4444;"></span>
+            <span>SEVERE (80-100)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- What-If Simulator Card (POST /api/predict) -->
+      <div class="simulator-card">
+        <div class="section-header">
+          <h3 class="card-title">
+            <span>🧪</span> "What-If" Flood Risk Simulator
+          </h3>
+          <span style="font-size: 0.75rem; color: var(--accent-cyan);">POST /api/predict</span>
+        </div>
+        <p style="font-size: 0.775rem; color: var(--text-secondary);">
+          Simulate weather shocks on catchments to test deterministic model response.
+        </p>
+
+        <div class="sim-input-group">
+          <div class="sim-label-row">
+            <span>Target Catchment Zone</span>
+          </div>
+          <select id="simZone" class="sim-select">
+            <option value="haldia">Haldia Industrial & Port Zone</option>
+          </select>
+        </div>
+
+        <div class="sim-input-group">
+          <div class="sim-label-row">
+            <span>24h Rainfall Input</span>
+            <span id="simRainVal" class="sim-val">50 mm</span>
+          </div>
+          <input type="range" id="simRain" class="sim-range" min="0" max="250" value="50" step="2">
+        </div>
+
+        <div class="sim-input-group">
+          <div class="sim-label-row">
+            <span>River Discharge Input</span>
+            <span id="simDischargeVal" class="sim-val">60 m³/s</span>
+          </div>
+          <input type="range" id="simDischarge" class="sim-range" min="0" max="600" value="60" step="5">
+        </div>
+
+        <!-- Simulation Result Output -->
+        <div class="sim-result-box">
+          <div class="gauge-row">
+            <div>
+              <div style="font-size: 0.75rem; color: var(--text-secondary);">Calculated Risk Index</div>
+              <div id="simScore" class="gauge-score" style="color: #38bdf8;">-- / 100</div>
+            </div>
+            <div>
+              <span id="simLevelPill" class="gauge-level-pill" style="background: #334155; color: #fff;">--</span>
+            </div>
+          </div>
+
+          <ul id="simFactorsList" class="sim-factors-list">
+            <li><span>Evaluating parameters...</span></li>
+          </ul>
+
+          <div style="font-size: 0.75rem; color: #38bdf8; border-top: 1px solid var(--border-color); padding-top: 0.4rem;">
+            <strong>Primary Action:</strong> <span id="simPrecaution">Adjust parameters above to simulate.</span>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- Zone Telemetry Table -->
+    <section class="table-section">
+      <div class="table-toolbar">
+        <div class="section-title">
+          <span>📊</span> Monitored Catchments Telemetry & Risk Index
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <input type="text" id="zoneSearch" class="search-input" placeholder="🔍 Search zone, district, basin...">
+          <div class="filter-pills">
+            <button class="filter-btn active" data-level="ALL">ALL</button>
+            <button class="filter-btn" data-level="LOW">LOW</button>
+            <button class="filter-btn" data-level="MODERATE">MODERATE</button>
+            <button class="filter-btn" data-level="HIGH">HIGH</button>
+            <button class="filter-btn" data-level="SEVERE">SEVERE</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="zone-table">
+          <thead>
+            <tr>
+              <th>Zone</th>
+              <th>District</th>
+              <th>River Basin</th>
+              <th>Rainfall (mm)</th>
+              <th>River Discharge (m³/s)</th>
+              <th>Risk Score / Category</th>
+              <th>Data Freshness</th>
+              <th>Recommended Action</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="zoneTableBody">
+            <tr>
+              <td colspan="9" style="text-align: center; padding: 2rem;">Loading catchment telemetry...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Trends Chart Section -->
+    <section class="chart-section">
+      <div class="section-header">
+        <h3 class="card-title">
+          <span>📈</span> Hydrological Multi-Day Trends & River Forecast
+        </h3>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 0.775rem; color: var(--text-secondary);">Catchment:</span>
+          <select id="chartZoneSelect" class="sim-select" style="padding: 0.25rem 0.6rem; font-size: 0.775rem;">
+            <option value="haldia">Haldia Industrial & Port Zone</option>
+          </select>
+        </div>
+      </div>
+      <p style="font-size: 0.75rem; color: var(--text-secondary);">
+        Chronological river discharge (m³/s) and rainfall observations from SQLite database and Open-Meteo GloFAS river models.
+      </p>
+      <div class="chart-wrapper">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="dashboard-footer">
+      <div class="footer-attribution">
+        Developed for <strong>Hack4Haldia'26 — Team C</strong> | <strong>Flood Early Warning System</strong> | Powered by 
+        <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo Weather Forecast</a> &amp; 
+        <a href="https://open-meteo.com/en/docs/flood-api" target="_blank" rel="noopener">GloFAS River Discharge APIs</a>.
+      </div>
+      <div>
+        REST API: <code>/health</code> • <code>/api/readings</code> • <code>/api/predict</code> • <code>/api/alerts</code>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Zone Detail Modal -->
+  <div id="zoneModal" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <h3 id="modalZoneName" class="modal-title">Zone Details</h3>
+          <p id="modalDistrict" style="font-size: 0.8rem; color: var(--text-secondary);"></p>
+        </div>
+        <button id="modalCloseBtn" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.85rem; color: var(--text-secondary);">Current Catchment Evaluation:</span>
+          <span id="modalRiskPill" class="risk-pill low">LOW (0/100)</span>
+        </div>
+
+        <div class="telemetry-grid">
+          <div class="telemetry-cell">
+            <div class="t-label">Current Precipitation</div>
+            <div id="modalRainCurrent" class="t-val">0.0 mm</div>
+          </div>
+          <div class="telemetry-cell">
+            <div class="t-label">24h Accumulated Rain</div>
+            <div id="modalRain24h" class="t-val">0.0 mm</div>
+          </div>
+          <div class="telemetry-cell">
+            <div class="t-label">7-Day Rain Outlook</div>
+            <div id="modalForecast7d" class="t-val">0.0 mm</div>
+          </div>
+          <div class="telemetry-cell">
+            <div class="t-label">River Discharge (GloFAS)</div>
+            <div id="modalDischarge" class="t-val">0.0 m³/s</div>
+          </div>
+          <div class="telemetry-cell">
+            <div class="t-label">Catchment Elevation</div>
+            <div id="modalElevation" class="t-val">-- m AMSL</div>
+          </div>
+          <div class="telemetry-cell">
+            <div class="t-label">Telemetry Freshness</div>
+            <div id="modalFreshness" class="t-val">LIVE</div>
+          </div>
+        </div>
+
+        <div style="font-size: 0.75rem; color: #94a3b8; background: #0f172a; padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+          ℹ️ <strong>Hydrological Distinction:</strong> River discharge is reported in cubic metres per second (m³/s). River water level (m) is distinct and requires localized river gauge stations.
+        </div>
+
+        <!-- Contributing Factors -->
+        <div class="factors-block">
+          <h4>Explainable Risk Factor Attribution</h4>
+          <ul id="modalFactorsList" class="factors-list">
+            <li>Loading factors...</li>
+          </ul>
+        </div>
+
+        <!-- Precautions -->
+        <div class="precautions-block">
+          <h4>Recommended Precautionary Civil Defense Actions</h4>
+          <ul id="modalPrecautionsList" class="precautions-list">
+            <li>Loading precautions...</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <!-- Dashboard JS -->
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
